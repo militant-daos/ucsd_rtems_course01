@@ -44,7 +44,7 @@ ErrCode spawnWorkerThread(pthread_t& rtEntry)
                                      nullptr);
     if (dErr != 0)
     {
-        std::cerr << "Failed to create the worker thread. Error: %d" << dErr;
+        std::cerr << "Failed to create the worker thread. Error: " << dErr;
         return ErrCode::PTHREAD_ERR;
     }
 

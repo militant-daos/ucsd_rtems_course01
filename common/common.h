@@ -6,15 +6,10 @@
 #include <syslog.h>
 #include <unistd.h>
 
+#include "error_codes.h"
+
 namespace cmn
 {
-enum class ErrCode
-{
-    OK = 0,
-    PTHREAD_ERR = -1, // Pthread creation error.
-    GENERAL_ERR = -2  // A general error, like a Syslog inetraction issue.
-};
-
 /**
  * @brief The class that implements resource guard logic. The constructor
  *        must be provided with a callback which should implement cleanup,
@@ -28,8 +23,8 @@ public:
     /**
      * @brief Class constructor.
      *
-     * @param rtHandler Function (callback) to be invoked
-     *                  upon class instance destruction.
+     * @param[in] rtHandler Function (callback) to be invoked
+     *                      upon class instance destruction.
      */
     explicit Finally(const std::function<void()>& rtHandler) :
         mtHandler(rtHandler)
@@ -104,6 +99,14 @@ ErrCode pushUnameOutput()
     return ErrCode::OK;
 }
 
+/**
+ * @brief Open Syslog instance and print
+ *        uname output to it.
+ *
+ * @param[in] rpSyslogLabel Label to be used to prepend all messages.
+ *
+ * @return Error code.
+ */
 ErrCode prepareSyslog(const char* rpSyslogLabel)
 {
     // A lazy approach: I didn't want to add another

@@ -63,7 +63,7 @@ ErrCode spawnThreads()
                                              {
                                                  dSum += i;
                                              }
-                                             syslog(LOG_DEBUG, "Thread idx=%lu, sum[1..%lu]=%lu", dIdx, dIdx, dSum);
+                                             syslog(LOG_DEBUG, "Thread idx=%zu, sum[1..%zu]=%zu", dIdx, dIdx, dSum);
                                              pthread_exit(nullptr);
 
                                              // No need to return - nullptr seems to be returned implicitly.
@@ -73,7 +73,7 @@ ErrCode spawnThreads()
                                          reinterpret_cast<void*>(&tEntry.first));
         if (dErr != 0)
         {
-            std::cerr << "Failed to create thread %lu," << tEntry.first.dThreadIdx << " error: %d" << dErr;
+            std::cerr << "Failed to create thread" << tEntry.first.dThreadIdx << " error: " << dErr;
             return ErrCode::PTHREAD_ERR;
         }
     }
