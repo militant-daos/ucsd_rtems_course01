@@ -7,6 +7,44 @@
 #include <unistd.h>
 
 #include "error_codes.h"
+#include "string_utils.h"
+
+// ---------------------------------------------------
+
+enum class LogSeverity
+{
+    TRACE,
+    ERROR
+};
+
+void logNotify(LogSeverity reSeverity, const char* rpFile, int rdLine, const char* rpFormat, ...)
+{
+    va_list tArgs;
+    va_start(tArgs, rpFormat);
+    const auto tFmt = str_utils::format_va(rpFormat, tArgs);
+    va_end(tArgs);
+
+    const char* pSeverityStr = reSeverity == LogSeverity::TRACE ? "TRACE" : "ERROR";
+    const auto tLocation = str_utils::format("[%s] %s @ %d: ", pSeverityStr, rpFile, rdLine);
+    const std::string tLog = tLocation + tFmt;
+
+    if (reSeverity == LogSeverity::TRACE)
+    {
+        std::cout << tLog << std::endl;
+    }
+    else
+    {
+        std::cerr << tLog << std::endl;
+    }
+
+    const auto tSyslogSeverity = reSeverity == LogSeverity::TRACE ? LOG_DEBUG : LOG_ERR;
+    syslog(tSyslogSeverity, "%s", tLog.c_str());
+}
+
+#define CMN_LOG_TRACE(rpFormat, ...) logNotify(LogSeverity::TRACE, __FILE__, __LINE__, rpFormat, __VA_ARGS__);
+#define CMN_LOG_ERROR(rpFormat, ...) logNotify(LogSeverity::ERROR, __FILE__, __LINE__, rpFormat, __VA_ARGS__);
+
+// ---------------------------------------------------
 
 namespace cmn
 {

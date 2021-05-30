@@ -13,6 +13,9 @@ enum class ErrCode : int
     ALREADY_ENABLED = -6,
     OVERFLOW = -7,
     SCHED_FAILURE = -8,
+    INVALID_ARGS = -9,
+    CLOCK_ERROR = -10,
+    TEST_FAILED = -11,
     GENERAL_ERR, // A general error, like a Syslog interaction issue.
     LAST // Enum sentinel.
 };
