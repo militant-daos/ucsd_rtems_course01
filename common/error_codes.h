@@ -15,25 +15,9 @@ enum class ErrCode : int
     SCHED_FAILURE = -8,
     INVALID_ARGS = -9,
     CLOCK_ERROR = -10,
-    TEST_FAILED = -11,
+    TEST_FAILED = -11, // A general error code, just before a test is aborted.
     GENERAL_ERR, // A general error, like a Syslog interaction issue.
+
     LAST // Enum sentinel.
 };
-
-// A general-purpose macro to handle standard POSIX calls
-// returning errors according to the well-known scheme
-// 0 = OK or -ERR_CODE.
-
-#define RET_ON_ERR(f,msg)\
-    do\
-    {\
-        const auto dErr = f;\
-        if (dErr != 0)\
-        {\
-            std::cerr << msg << dErr << std::endl;\
-            return cmn::ErrCode::GENERAL_ERR;\
-        }\
-    }\
-    while(0);
-
 }

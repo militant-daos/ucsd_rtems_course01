@@ -9,6 +9,7 @@
 
 #include <time.h>
 
+#include "common.h"
 #include "error_codes.h"
 
 // Units definitions
@@ -32,6 +33,31 @@ enum ClockTypeId : clockid_t
     MonotonicCoarse = CLOCK_MONOTONIC_COARSE
 };
 
+const char* clockIdToString(ClockTypeId reClockTypeId)
+{
+    switch (reClockTypeId)
+    {
+        case ClockTypeId::RealTime:
+            return "RealTime";
+
+        case ClockTypeId::Monotonic:
+            return "Monotonic";
+
+        case ClockTypeId::MonotonicRaw:
+            return "MonotonicRaw";
+
+        case ClockTypeId::RealTimeCoarse:
+            return "RealTimeCoarse";
+
+        case ClockTypeId::MonotonicCoarse:
+            return "MonotonicCoarse";
+
+        default:
+            // Add an assertion maybe?
+            return "Unknown Type";
+    }
+}
+
 double timeDiffInSeconds(const timespec& rtStart, const timespec& rtStop)
 {
     // Convert both start and end points to seconds.
@@ -46,15 +72,9 @@ double timeDiffInSeconds(const timespec& rtStart, const timespec& rtStop)
     return dDfStop - dDfStart;
 }
 
-cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop, timespec& rtDiff)
+cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop, timespec& rtDiff,
+        bool rbIgnoreNegDelta = false)
 {
-    // Quick check that the end point is actually in
-    // future.
-    if (rtStop.tv_sec >= rtStart.tv_sec)
-    {
-        return cmn::ErrCode::INVALID_ARGS;
-    }
-
     // The original code http://ecee.colorado.edu/%7Eecen5623/ecen/ex/Linux/RT-Clock/
     // uses int type but this is not a good approach since we do narrowing
     // conversion in such a case and if we have a long time period we may get
@@ -68,13 +88,20 @@ cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop,
         if (dDeltaNsec < 0)
         {
             // The end point occurs earlier than the start.
-            return cmn::ErrCode::OVERFLOW;
+
+            if (not rbIgnoreNegDelta)
+            {
+                CMN_LOG_ERROR("Delta-Ns overflow: %ld (delta seconds == 0)", dDeltaNsec);
+                return cmn::ErrCode::OVERFLOW;
+            }
+
+            return cmn::ErrCode::OK;
         }
 
         // Case 1: the time span is less than a second.
 
-        // dDeltaNsec < NSEC_PER_SEC check may be redundant since
-        // accroding to the spec tv_nsec may NOT exceed 1 second
+        // dDeltaNsec > NSEC_PER_SEC check may be redundant (?) since
+        // according to the spec tv_nsec may NOT exceed 1 second
         // in case it is obtained with clock_gettime(); please
         // see https://pubs.opengroup.org/onlinepubs/9699919799/functions/V2_chap02.html ,
         // paragraph 2.8.5.
@@ -83,7 +110,7 @@ cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop,
             rtDiff.tv_sec = 0;
             rtDiff.tv_nsec = dDeltaNsec;
         }
-        else if (dDeltaNsec > NSEC_PER_SEC)
+        else // dDeltaNsec > NSEC_PER_SEC - rollover, correct to +1 second.
         {
             // An overflow. Unlikely to happen in an average case - please see above.
             // Assume that we have an overflow not more than 1 second ;-)
@@ -100,29 +127,32 @@ cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop,
             rtDiff.tv_sec = dDeltaSec;
             rtDiff.tv_nsec = dDeltaNsec;
         }
-        else if (dDeltaNsec > NSEC_PER_SEC)
+        else
         {
-            // Unlikely, unless we have a clock error or set the
-            // values manually without checking the ranges.
-            // Again, assuming that we have not more then one
-            // second overflow.
-            ++rtDiff.tv_sec;
-            rtDiff.tv_nsec = dDeltaNsec - NSEC_PER_SEC;
-        }
-        else // dDeltaNsec < 0 - also unlikely; see above.
-        {
-            // Do a "correction"; not sure whether this is a right solution.
-            --rtDiff.tv_sec;
-            rtDiff.tv_nsec = dDeltaNsec + NSEC_PER_SEC;
+            if (dDeltaNsec > NSEC_PER_SEC) // One second rollover.
+            {
+                ++rtDiff.tv_sec;
+                rtDiff.tv_nsec = dDeltaNsec - NSEC_PER_SEC;
+            }
+            else
+            {
+                // May get here during DT error computation -
+                // a negative rollover, dDeltaNsec < NSEC_PER_SEC.
+                rtDiff.tv_sec = dDeltaSec - 1;
+                rtDiff.tv_nsec = dDeltaNsec + NSEC_PER_SEC;
+            }
         }
     }
 
     return cmn::ErrCode::OK;
 }
 
-cmn::ErrCode getTime(ClockTypeId rtClockId, timespec* rpOutput)
+cmn::ErrCode getTime(ClockTypeId rtClockId, timespec& rtOutput)
 {
-    if (0 != clock_gettime((clockid_t) rtClockId, rpOutput))
+    // Need to use C-style cast since even reinterpret_cast does not
+    // work despite using enum class with a proper numeric base type,
+    // have no idea why. I feel shame for this.
+    if (0 != clock_gettime((clockid_t) rtClockId, &rtOutput))
     {
         return cmn::ErrCode::CLOCK_ERROR;
     }
@@ -130,9 +160,12 @@ cmn::ErrCode getTime(ClockTypeId rtClockId, timespec* rpOutput)
     return cmn::ErrCode::OK;
 }
 
-cmn::ErrCode getClockResolution(ClockTypeId rtClockId, timespec* rpOutput)
+cmn::ErrCode getClockResolution(ClockTypeId rtClockId, timespec& rtOutput)
 {
-    if (0 != clock_getres((clockid_t) rtClockId, rpOutput))
+    // Need to use C-style cast since even reinterpret_cast does not
+    // work despite using enum class with a proper numeric base type,
+    // have no idea why. I feel shame for this.
+    if (0 != clock_getres((clockid_t) rtClockId, &rtOutput))
     {
         return cmn::ErrCode::CLOCK_ERROR;
     }

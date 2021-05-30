@@ -24,7 +24,7 @@ distclean:
 	-rm -f posix_clock
 
 posix_clock: posix_clock.o
-	$(CXX) $(LDFLAGS) -o $@ $@.o -lpthread -lstdc++
+	$(CXX) $(LDFLAGS) -o $@ $@.o -lpthread -lstdc++ -lrt
 
 depend:
 

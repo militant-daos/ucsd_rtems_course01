@@ -26,21 +26,27 @@ constexpr auto SYSLOG_LABEL = "[COURSE:1][ASSIGNMENT:4]";
 constexpr size_t MAX_SLEEP_COUNT = 3;
 }
 
-void endDelayTest(const timespec& rtStart, const timespec& rtStop, const timespec& rtDiff, const timespec& rtError)
+void endDelayTest(ClockTypeId reClockTypeId, const timespec& rtStart, const timespec& rtStop,
+        const timespec& rtDiff, const timespec& rtError)
 {
     const auto dRealDt = timeDiffInSeconds(rtStart, rtStop);
-    CMN_LOG_TRACE("MY_CLOCK clock DT seconds = %ld, msec = %ld, usec = %ld, nsec = %ld, sec = %6.9lf",
-            rtDiff.tv_sec, rtDiff.tv_nsec / NSEC_PER_MSEC, rtDiff.tv_nsec / NSEC_PER_USEC, rtDiff.tv_nsec, dRealDt);
-    CMN_LOG_TRACE("MY_CLOCK delay error = %ld, nanoseconds = %ld",
-            rtError.tv_sec, rtError.tv_nsec);
+
+    CMN_LOG_TRACE("%s clock DT seconds = %ld, msec = %ld, usec = %ld, nsec = %ld, sec = %6.9lf",
+            clockIdToString(reClockTypeId), rtDiff.tv_sec, rtDiff.tv_nsec / NSEC_PER_MSEC,
+            rtDiff.tv_nsec / NSEC_PER_USEC, rtDiff.tv_nsec, dRealDt);
+
+    CMN_LOG_TRACE("%s clock delay error seconds = %ld, nanoseconds = %ld, ms. = %ld",
+            clockIdToString(reClockTypeId), rtError.tv_sec, rtError.tv_nsec, rtError.tv_nsec / NSEC_PER_MSEC);
 }
 
-ErrCode delayTest(ClockTypeId rtClockType)
+ErrCode delayTest(ClockTypeId reClockTypeId)
 {
+    const bool bIgnoreNegDeltaErrs = reClockTypeId != ClockTypeId::MonotonicRaw;
+
     timespec tClockResolution {};
-    if (getClockResolution(rtClockType, &tClockResolution) != ErrCode::OK)
+    if (getClockResolution(reClockTypeId, tClockResolution) != ErrCode::OK)
     {
-        CMN_LOG_ERROR("Failed to get clock resolution for clock type %d", rtClockType);
+        CMN_LOG_ERROR("Failed to get clock resolution for clock type %d", reClockTypeId);
         return ErrCode::TEST_FAILED;
     }
 
@@ -72,7 +78,7 @@ ErrCode delayTest(ClockTypeId rtClockType)
         tSleepRequested.tv_sec = tSleepTime.tv_sec;
         tSleepRequested.tv_nsec = tSleepTime.tv_nsec;
 
-        if (getTime(rtClockType, &tRtcStartTime) != ErrCode::OK)
+        if (getTime(reClockTypeId, tRtcStartTime) != ErrCode::OK)
         {
             CMN_LOG_ERROR("Failed to get RTC start time for iteration %u", dIdx);
             return ErrCode::TEST_FAILED;
@@ -89,9 +95,16 @@ ErrCode delayTest(ClockTypeId rtClockType)
             }
             else if (dRc != EINTR)
             {
-                CMN_LOG_ERROR("nanosleep call failed with err code %d", dRc);
+                CMN_LOG_ERROR("nanosleep() call failed with err code %d", dRc);
                 return ErrCode::TEST_FAILED;
             }
+
+            // If we got here it means that EINTR was returned from nanosleep()
+            // call and our thread was woken up by the scheduler. This is a normal
+            // behavior for nanosleep so we need to check how much remaining time
+            // left. Clock resolution should matter: with better resolution we
+            // should have smaller sleep error diff between the requested time
+            // and the actual one.
 
             tSleepTime.tv_sec = tRemainingTime.tv_sec;
             tSleepTime.tv_nsec = tRemainingTime.tv_nsec;
@@ -101,28 +114,31 @@ ErrCode delayTest(ClockTypeId rtClockType)
         while (((tRemainingTime.tv_sec > 0) || (tRemainingTime.tv_nsec > 0))
                 && (dSleepCount < MAX_SLEEP_COUNT));
 
-        if (getTime(rtClockType, &tRtcStopTime) != ErrCode::OK)
+        if (getTime(reClockTypeId, tRtcStopTime) != ErrCode::OK)
         {
             CMN_LOG_ERROR("Failed to get RTC stop time for iteration %u", dIdx);
             return ErrCode::TEST_FAILED;
         }
 
-        auto tErr = timeDiffInTimespec(tRtcStartTime, tRtcStopTime, tRtcDiff);
-        if (tErr != ErrCode::OK)
+        auto tErr = timeDiffInTimespec(tRtcStartTime, tRtcStopTime, tRtcDiff, bIgnoreNegDeltaErrs);
+        if (tErr != ErrCode::OK && not bIgnoreNegDeltaErrs)
         {
             CMN_LOG_ERROR("Failed to compute start-stop diff, err %d", tErr);
-            std::cout<<"Failed to compute start-stop diff, err" << (int)tErr << std::endl;
             return tErr;
         }
 
-        tErr = timeDiffInTimespec(tSleepRequested, tRtcDiff, tDelayError);
-        if (tErr != ErrCode::OK)
+        tErr = timeDiffInTimespec(tSleepRequested, tRtcDiff, tDelayError, bIgnoreNegDeltaErrs);
+        if (tErr != ErrCode::OK && not bIgnoreNegDeltaErrs)
         {
             CMN_LOG_ERROR("Failed to compute sleep error diff, err %d", tErr);
             return tErr;
         }
 
-        endDelayTest(tRtcStartTime, tRtcStopTime, tRtcDiff, tDelayError);
+        endDelayTest(reClockTypeId, tRtcStartTime, tRtcStopTime, tRtcDiff, tDelayError);
+
+        // It would be also nice to know how much iterations it took to sleep for the required
+        // time span; it should depend on clock resolution and scheduling policy I guess.
+        CMN_LOG_TRACE("Sleep count: %u", dSleepCount);
     }
 
     return ErrCode::OK;
@@ -134,6 +150,10 @@ ErrCode makeTestThread(pthread_attr_t& rtThreadAttr, pthread_t& rtThreadId)
                                      &rtThreadAttr,
                                      [](void*) -> void*
                                      {
+                                         // Most notable difference in results is between
+                                         // ClockTypeId::MonotonicRaw and ClockTypeId::MonotonicCoarse,
+                                         // the latter has worse resolution and sleep DT error may reach
+                                         // 2 milliseconds.
                                          const auto tRetCode = delayTest(ClockTypeId::MonotonicRaw);
                                          if (tRetCode != ErrCode::OK)
                                          {
@@ -147,7 +167,7 @@ ErrCode makeTestThread(pthread_attr_t& rtThreadAttr, pthread_t& rtThreadId)
 
     if (dErr != 0)
     {
-        std::cerr << "Failed to spawn the test thread: " << dErr << " : " << strerror(dErr) << std::endl;
+        CMN_LOG_ERROR("Failed to spawn the test thread: %d (%s)", dErr, strerror(dErr));
         return ErrCode::PTHREAD_ERR;
     }
 
@@ -172,7 +192,10 @@ int main(int argc, char* argv[])
 
     // Adjust scheduler params including CPU cores set, priority (implicitly the max one is used)
     // and scheduling policy.
-    if (ErrCode::OK != adjustScheduler(tCpuSet, SCHED_FIFO, tWorkerThreadsAttr, true /* verbose mode */))
+    // There is a possibility to play with different scheduling policies to observe different
+    // numbers for DT errors and sleep iterations.
+    SchedPolicy tSchedPolicy = SCHED_FIFO;
+    if (ErrCode::OK != adjustScheduler(tCpuSet, tSchedPolicy, tWorkerThreadsAttr, true /* verbose mode */))
     {
         exit(EXIT_FAILURE);
     }
@@ -189,6 +212,6 @@ int main(int argc, char* argv[])
     // Wait for the starter thread and the worker threads to join.
     pthread_join(tStarterThread, nullptr);
 
-    std::cout << "TEST COMPLETE" << std::endl;
+    CMN_LOG_TRACE("TEST COMPLETE");
     exit(EXIT_SUCCESS);
 }

@@ -101,7 +101,7 @@ cmn::ErrCode adjustScheduler(const CpuSet& rtCpuSet, SchedPolicy rtNewPolicy, pt
 {
     if (rbVerbose)
     {
-        std::cout << "Initial sched policy " << getSchedulerPolicyStr(getCurrThreadSchedulerPolicy()) << std::endl;
+        CMN_LOG_TRACE("Initial sched policy %s", getSchedulerPolicyStr(getCurrThreadSchedulerPolicy()));
     }
 
     pthread_attr_init(&rtAdjustedAttr);
@@ -140,7 +140,7 @@ cmn::ErrCode adjustScheduler(const CpuSet& rtCpuSet, SchedPolicy rtNewPolicy, pt
 
     if (rbVerbose)
     {
-        std::cout << "Adjusted sched policy " << getSchedulerPolicyStr(getCurrThreadSchedulerPolicy()) << std::endl;
+        CMN_LOG_TRACE("Adjusted sched policy %s", getSchedulerPolicyStr(getCurrThreadSchedulerPolicy()));
     }
 
     return cmn::ErrCode::OK;
