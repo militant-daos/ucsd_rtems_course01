@@ -23,9 +23,18 @@ using namespace str_utils;
 namespace
 {
 constexpr auto SYSLOG_LABEL = "[COURSE:1][ASSIGNMENT:4]";
-constexpr size_t MAX_SLEEP_COUNT = 3;
 }
 
+
+/**
+ * @brief Compute and print test results.
+ *
+ * @param reClockTypeId Clock ID used for the test.
+ * @param rtStart Test start time point.
+ * @param rtStop Test stop time point.
+ * @param rtDiff Start-stop poits diff.
+ * @param rtError Error value between the requested sleep time and the actual one.
+ */
 void endDelayTest(ClockTypeId reClockTypeId, const timespec& rtStart, const timespec& rtStop,
         const timespec& rtDiff, const timespec& rtError)
 {
@@ -39,6 +48,16 @@ void endDelayTest(ClockTypeId reClockTypeId, const timespec& rtStart, const time
             clockIdToString(reClockTypeId), rtError.tv_sec, rtError.tv_nsec, rtError.tv_nsec / NSEC_PER_MSEC);
 }
 
+/**
+ * @brief Nanosleep delay test logic. Try to sleep for tSleepRequested time
+ *        and then compute error value between the actual sleeped time and the
+ *        requested one. Perform the same actions TEST_ITERATIONS times to
+ *        get some statistic data.
+ *
+ * @param reClockTypeId Clock type ID to use for the test.
+ *
+ * @return Status code.
+ */
 ErrCode delayTest(ClockTypeId reClockTypeId)
 {
     const bool bIgnoreNegDeltaErrs = reClockTypeId != ClockTypeId::MonotonicRaw;
@@ -52,12 +71,13 @@ ErrCode delayTest(ClockTypeId reClockTypeId)
 
     CMN_LOG_TRACE("POSIX Clock demo using system RT clock with resolution: %ld secs, %ld microsecs, %ld nanosecs",
             tClockResolution.tv_sec,
-            (tClockResolution.tv_nsec / 1000),
+            (tClockResolution.tv_nsec / NSEC_PER_USEC),
             tClockResolution.tv_nsec);
 
-    constexpr size_t dTestIterations = 100;
-    constexpr size_t dTestSleepSeconds = 0;
-    constexpr size_t dTestSleepNanoseconds = NSEC_PER_MSEC * 10;
+    constexpr size_t MAX_SLEEP_COUNT = 3;
+    constexpr size_t TEST_ITERATIONS = 100;
+    constexpr size_t TEST_SLEEP_SECONDS = 0;
+    constexpr size_t TEST_SLEEP_NANOSECONDS = NSEC_PER_MSEC * 10;
 
     timespec tRtcStartTime {};
     timespec tRtcStopTime {};
@@ -68,12 +88,12 @@ ErrCode delayTest(ClockTypeId reClockTypeId)
     timespec tSleepRequested {};
     timespec tRemainingTime {};
 
-    for (size_t dIdx = 0; dIdx < dTestIterations; ++dIdx)
+    for (size_t dIdx = 0; dIdx < TEST_ITERATIONS; ++dIdx)
     {
         CMN_LOG_TRACE("Test %u", dIdx);
 
-        tSleepTime.tv_sec = dTestSleepSeconds;
-        tSleepTime.tv_nsec = dTestSleepNanoseconds;
+        tSleepTime.tv_sec = TEST_SLEEP_SECONDS;
+        tSleepTime.tv_nsec = TEST_SLEEP_NANOSECONDS;
 
         tSleepRequested.tv_sec = tSleepTime.tv_sec;
         tSleepRequested.tv_nsec = tSleepTime.tv_nsec;
@@ -91,6 +111,9 @@ ErrCode delayTest(ClockTypeId reClockTypeId)
             const auto dRc = nanosleep(&tSleepTime, &tRemainingTime);
             if (dRc == 0)
             {
+                // nanosleep call succeeded and we sleeped for tSleepTime
+                // without any time left for another attempt; tRemainingTime
+                // equals 0 in this case.
                 break;
             }
             else if (dRc != EINTR)

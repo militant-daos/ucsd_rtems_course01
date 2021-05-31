@@ -20,10 +20,19 @@ enum class LogSeverity
     ERROR
 };
 
+/**
+ * @brief Format and push log message to stdout/stderr and Syslog.
+ *
+ * @param reSeverity Severity level ID.
+ * @param rpFile Source file where CMN_LOG_... was called.
+ * @param rdLine Line at which CMN_LOG_... was called.
+ * @param ... Format string and params given in a printf()-like form.
+ */
 void logNotify(LogSeverity reSeverity, const char* rpFile, int rdLine, ...)
 {
     va_list tArgs;
     va_start(tArgs, rdLine);
+
     const char* pFormat = va_arg(tArgs, const char*);
     const auto tFmt = str_utils::format_va(pFormat, tArgs);
     va_end(tArgs);

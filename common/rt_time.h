@@ -24,6 +24,9 @@
 namespace rt_time
 {
 
+/**
+ * @brief Clock type IDs.
+ */
 enum ClockTypeId : clockid_t
 {
     RealTime = CLOCK_REALTIME,
@@ -33,6 +36,13 @@ enum ClockTypeId : clockid_t
     MonotonicCoarse = CLOCK_MONOTONIC_COARSE
 };
 
+/**
+ * @brief Return human-readable name for the given clock type ID.
+ *
+ * @param reClockTypeId Clock type ID.
+ *
+ * @return String-form type ID.
+ */
 const char* clockIdToString(ClockTypeId reClockTypeId)
 {
     switch (reClockTypeId)
@@ -58,6 +68,14 @@ const char* clockIdToString(ClockTypeId reClockTypeId)
     }
 }
 
+/**
+ * @brief Compute time points diff in seconds.
+ *
+ * @param rtStart Start time point.
+ * @param rtStop Stop time point.
+ *
+ * @return Diff in seconds.
+ */
 double timeDiffInSeconds(const timespec& rtStart, const timespec& rtStop)
 {
     // Convert both start and end points to seconds.
@@ -72,6 +90,21 @@ double timeDiffInSeconds(const timespec& rtStart, const timespec& rtStop)
     return dDfStop - dDfStart;
 }
 
+/**
+ * @brief Compute time diff as a timespec structure.
+ *
+ * @param rtStart Start time point.
+ * @param rtStop Stop time point.
+ * @param rtDiff Diff output structure ref.
+ * @param rbIgnoreNegDelta If set to true - ignore dDeltaNsec < 0 case - return OK instead
+ *                         of printing an error and failing. For certain clock types this
+ *                         case may actually happen and it is Ok.
+ *                         In http://ecee.colorado.edu/%7Eecen5623/ecen/ex/Linux/RT-Clock/
+ *                         this happens for all clock types except MonotonicRaw but the test
+ *                         does not stop because return code from delta_t() call is ignored :-)
+ *
+ * @return Status code.
+ */
 cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop, timespec& rtDiff,
         bool rbIgnoreNegDelta = false)
 {
@@ -147,6 +180,14 @@ cmn::ErrCode timeDiffInTimespec(const timespec& rtStart, const timespec& rtStop,
     return cmn::ErrCode::OK;
 }
 
+/**
+ * @brief Get current time.
+ *
+ * @param rtClockId Clock type ID.
+ * @param rtOutput Time conatiner output ref.
+ *
+ * @return Status code.
+ */
 cmn::ErrCode getTime(ClockTypeId rtClockId, timespec& rtOutput)
 {
     // Need to use C-style cast since even reinterpret_cast does not
@@ -160,6 +201,14 @@ cmn::ErrCode getTime(ClockTypeId rtClockId, timespec& rtOutput)
     return cmn::ErrCode::OK;
 }
 
+/**
+ * @brief Get clock resolution for the given clock type ID.
+ *
+ * @param rtClockId Clock type ID to get resolution for.
+ * @param rtOutput Resolution output container ref. in timespec format.
+ *
+ * @return Status code.
+ */
 cmn::ErrCode getClockResolution(ClockTypeId rtClockId, timespec& rtOutput)
 {
     // Need to use C-style cast since even reinterpret_cast does not
